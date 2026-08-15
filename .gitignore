@@ -1,0 +1,7 @@
+# .gitignore
+argos-prob
+argos-prob.exe
+*.log
+/dist/
+/tmp/
+.DS_Store
