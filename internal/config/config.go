@@ -10,13 +10,45 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"time"
+)
+
+const (
+	ModePassive = "passive"
+	ModeActive  = "active"
 )
 
 type Config struct {
-	AgentID  string `json:"agent_id"`
-	Name     string `json:"name,omitempty"`
-	Endpoint string `json:"endpoint,omitempty"`
-	Token    string `json:"token,omitempty"`
+	AgentID      string `json:"agent_id"`
+	Name         string `json:"name,omitempty"`
+	Mode         string `json:"mode,omitempty"`
+	Endpoint     string `json:"endpoint,omitempty"`
+	Token        string `json:"token,omitempty"`
+	PushInterval uint64 `json:"push_interval_seconds,omitempty"`
+	ListenAddr   string `json:"listen_addr,omitempty"`
+}
+
+func (c Config) TransportMode() string {
+	switch c.Mode {
+	case ModeActive, ModePassive:
+		return c.Mode
+	default:
+		return ModePassive
+	}
+}
+
+func (c Config) Interval() time.Duration {
+	if c.PushInterval <= 0 {
+		return 60 * time.Second
+	}
+	return time.Duration(c.PushInterval) * time.Second
+}
+
+func (c Config) Address() string {
+	if c.ListenAddr == "" {
+		return "127.0.0.1:8456"
+	}
+	return c.ListenAddr
 }
 
 func Path() (string, error) {
@@ -81,6 +113,9 @@ func LoadOrCreate() (Config, string, error) {
 	}
 	if cfg.AgentID == "" {
 		return Config{}, path, errors.New("configuration has no agent_id")
+	}
+	if cfg.Mode != "" && cfg.Mode != ModePassive && cfg.Mode != ModeActive {
+		return Config{}, path, fmt.Errorf("invalid mode %q (expected %q or %q)", cfg.Mode, ModePassive, ModeActive)
 	}
 	return cfg, path, nil
 }

@@ -2,14 +2,18 @@
 package main
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"os"
+	"os/signal"
+	"syscall"
 
 	"github.com/Bissiking/argos-prob/internal/capabilities"
 	"github.com/Bissiking/argos-prob/internal/config"
 	"github.com/Bissiking/argos-prob/internal/doctor"
 	"github.com/Bissiking/argos-prob/internal/host"
+	"github.com/Bissiking/argos-prob/internal/transport"
 )
 
 const version = "0.1.0-dev"
@@ -30,6 +34,8 @@ func main() {
 		err = runDoctor()
 	case "version", "--version", "-v":
 		fmt.Println(version)
+	case "run":
+		err = runRun()
 	case "help", "--help", "-h":
 		usage()
 	default:
@@ -49,10 +55,14 @@ func usage() {
 
 Usage:
   argos-prob init      Create the local configuration
+  argos-prob run       Daemon: report metrics (passive or active mode)
   argos-prob status    Print local host inventory as JSON
   argos-prob doctor    Run local diagnostics
   argos-prob version   Print version
 
+Modes (configured in config.json):
+  passive   Push metrics to Argos every push_interval_seconds
+  active    Serve metrics locally for Argos to pull
 The remote Argos API is optional in this development version.`)
 }
 
@@ -67,6 +77,21 @@ func runInit() error {
 		fmt.Printf("Configuration already exists: %s\n", path)
 	}
 	return nil
+}
+
+func runRun() error {
+	cfg, _, err := config.LoadOrCreate()
+	if err != nil {
+		return err
+	}
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer stop()
+	switch cfg.TransportMode() {
+	case config.ModeActive:
+		return transport.Serve(ctx, cfg)
+	default:
+		return transport.PushLoop(ctx, cfg)
+	}
 }
 
 func runStatus() error {
