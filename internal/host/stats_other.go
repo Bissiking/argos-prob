@@ -5,6 +5,6 @@ package host
 
 import "fmt"
 
-func platformStats() (Memory, uint64, error) {
-	return Memory{}, 0, fmt.Errorf("platform metrics are not implemented for this operating system")
+func collectPlatform() (platformSnapshot, error) {
+	return platformSnapshot{}, fmt.Errorf("platform metrics are not implemented for this operating system")
 }

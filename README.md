@@ -1,86 +1,109 @@
 # Argos Prob
 
-**Argos Prob** is the lightweight, cross-platform host agent for Argos.
+**Argos Prob** est l'agent hôte léger et multiplateforme d'Argos. Il se connecte
+au **master Argos** pour y être supervisé : le master accepte ou refuse son
+association, puis l'agent pousse son snapshot à l'intervalle consigné.
 
-The agent is designed to keep working even when optional components such as Docker, Proxmox or a service manager are unavailable. The Argos server API is **not required yet**: the current development version can initialize itself and expose a local inventory through its CLI.
+L'agent reste fonctionnel quand les composants optionnels (Docker, Proxmox,
+gestionnaire de services) sont absents.
 
-## Supported targets
+## Cibles supportées
 
-The architecture targets:
+- Windows 10 / 11 et Windows Server
+- Linux (Debian, Ubuntu, …)
+- Hôtes Proxmox VE
+- macOS Intel et Apple Silicon
 
-- Windows 10 / 11
-- Windows Server
-- Linux, including Debian and Ubuntu
-- Proxmox VE hosts
-- macOS Intel
-- macOS Apple Silicon
+Argos Prob lui-même ne requiert pas Docker.
 
-Argos Prob itself does not require Docker.
-
-## Quick start
+## Démarrage rapide
 
 ```bash
 go build -o argos-prob ./cmd/argos-prob
-./argos-prob init
-./argos-prob doctor
-./argos-prob status
+./argos-prob init          # renseigner l'URL du master et le jeton d'invitation
+./argos-prob run           # attendre l'approbation puis pousser les métriques
 ```
 
-On Windows:
+`init` accepte aussi les flags `--url` et `--token` :
 
-```powershell
-go build -o argos-prob.exe ./cmd/argos-prob
-.\argos-prob.exe init
-.\argos-prob.exe doctor
-.\argos-prob.exe status
+```bash
+./argos-prob init --url https://argos.example.net --token AR-xxxxxxxx
 ```
 
-## Commands
+## Flux d'association
 
-| Command | Purpose |
+1. Le **master** génère une invitation (`Paramètres → Serveurs → Inviter un agent`) :
+   une URL de master et un jeton `AR-…` (valable 7 jours, à usage unique).
+2. Sur la machine cible, `argos-prob init` demande **URL du master** et **jeton**,
+   puis crée une **demande d'association** (hostname + IP) sur le master.
+3. Le master **accepte ou refuse** la demande.
+4. Acceptée, `argos-prob run` récupère la consigne d'intervalle
+   (`PUSH_INTERVAL_MS` du master) et pousse un snapshot toutes les N ms via
+   `POST /api/v1/agents/metrics`. Sans poussée pendant `OFFLINE_AFTER_MS`, le
+   master marque l'agent `degraded` puis `offline`.
+5. Refusée, l'agent cesse et demande une nouvelle invitation.
+
+## Commandes
+
+| Commande | Rôle |
 | --- | --- |
-| `init` | Creates a local agent identity and configuration |
-| `status` | Prints the current host inventory as JSON |
-| `doctor` | Checks the local installation and capabilities |
-| `version` | Prints the agent version |
+| `init` | Associe l'hôte au master (URL + jeton), écrit la configuration |
+| `run` | Attend l'approbation puis pousse les métriques en boucle |
+| `status` | Affiche l'inventaire local (snapshot) au format JSON |
+| `doctor` | Diagnostic local |
+| `version` | Version |
+
+Le mode **active** (pull, exposé sur `/api/v1/snapshot`) reste disponible en
+configurant `"mode": "active"` : le master interroge alors l'agent directement.
 
 ## Configuration
 
-Default paths:
+Chemins par défaut :
 
-- Linux as root: `/etc/argos-prob/config.json`
-- Linux/macOS as a regular user: the OS user configuration directory
-- Windows: `%ProgramData%\\ArgosProb\\config.json`
+- Linux root : `/etc/argos-prob/config.json`
+- Linux/macOS utilisateur : le répertoire de configuration utilisateur
+- Windows : `%ProgramData%\ArgosProb\config.json`
 
-For development, override the path with `ARGOS_PROB_CONFIG`.
+Pour le développement, surcharger le chemin avec `ARGOS_PROB_CONFIG`.
 
-The configuration already contains optional `endpoint` and `token` fields so the future Argos API can be connected without redesigning the agent.
+```json
+{
+  "agent_id": "<identité persistante>",
+  "name": "<hostname>",
+  "mode": "passive",
+  "endpoint": "https://argos.example.net",
+  "token": "AR-…"
+}
+```
 
-## Safety principles
+## Snapshot transmis
 
-- No arbitrary remote shell execution.
-- Docker and Proxmox are optional capabilities, not hard dependencies.
-- A missing provider must not prevent core host inventory from working.
-- Remote actions will use an explicit allowlist.
-- Read-only inventory comes before remote administration.
-- Failures must be isolated per provider.
+Le snapshot correspond au contrat `AgentSnapshot` du master : CPU (usage, load,
+cœurs), mémoire + swap, volumes de stockage, interfaces réseau, services
+(systemd), conteneurs Docker et VM/CT Proxmox.
 
-## Current development scope
+## Principes de sécurité
 
-Version `0.1.0-dev` provides:
+- Pas d'exécution shell arbitraire à distance.
+- Docker et Proxmox sont des capacités optionnelles, pas des dépendances.
+- Un fournisseur absent ne doit pas empêcher l'inventaire hôte de fonctionner.
+- Les actions à distance utiliseront une liste explicite.
+- L'inventaire en lecture seule précède toute administration à distance.
 
-- persistent random agent identity
-- OS / architecture / hostname detection
-- CPU count
-- RAM usage
-- uptime
-- network interfaces and addresses
-- Docker capability detection
-- systemd detection on Linux
-- Proxmox detection on Linux
-- Windows Services capability flag
-- launchd detection on macOS
-- local diagnostics
-- JSON inventory output
+## Portée actuelle
 
-Next steps are native service installation, richer disk/service inventory, provider isolation, local structured logs and the future authenticated transport to Argos.
+Version `0.1.0-dev` fournit :
+
+- identité d'agent persistante (agent_id, hostname)
+- OS / noyau / architecture / IP
+- CPU : usage %, load 1/5/15, nombre de cœurs
+- mémoire et swap
+- volumes de stockage (taille, utilisé, disponible, usage %)
+- interfaces réseau (adresses, état, débit, octets RX/TX)
+- services systemd (Linux), conteneurs Docker, VM/CT Proxmox
+- détection des capacités (Docker, systemd, Proxmox, Windows Services, launchd)
+- association push avec demandes approuvées/refusées par le master
+- diagnostic local et inventaire JSON
+
+Prochaines étapes : installation en service natif, plus de détails
+d'inventaire, isolation par fournisseur, logs structurés.

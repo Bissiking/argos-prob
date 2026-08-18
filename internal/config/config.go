@@ -120,6 +120,15 @@ func LoadOrCreate() (Config, string, error) {
 	return cfg, path, nil
 }
 
+// Save persists the configuration to the given path, creating its directory
+// and tightening file permissions to the current user only.
+func Save(path string, cfg Config) error {
+	if cfg.AgentID == "" {
+		return errors.New("cannot save a configuration without agent_id")
+	}
+	return write(path, cfg)
+}
+
 func write(path string, cfg Config) error {
 	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
 		return err
