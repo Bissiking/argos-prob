@@ -72,9 +72,37 @@ Pour le développement, surcharger le chemin avec `ARGOS_PROB_CONFIG`.
   "name": "<hostname>",
   "mode": "passive",
   "endpoint": "https://argos.example.net",
-  "token": "AR-…"
+  "token": "AR-…",
+  "actions": {
+    "services": ["nginx.service", "backup-*.service"],
+    "containers": ["nextcloud*"],
+    "vms": [100, 104]
+  }
 }
 ```
+
+## Actions à distance (contrôle depuis le master)
+
+En mode **active** (pull), le master appelle directement l'agent :
+`POST /api/v1/services/{unité}/{action}`,
+`POST /api/v1/containers/{nom}/{action}` et
+`POST /api/v1/proxmox/{qemu|lxc}/{vmid}/{action}` (authentifié par le jeton
+Bearer). En mode **passive** (push), le master ne pouvant pas joindre l'agent,
+il **queue la commande** dans `server_commands` et l'agent la tire au fil de sa
+boucle via `GET /api/v1/agents/commands`, l'exécute localement et renvoie le
+résultat.
+
+Chaque opération est **typée** — jamais de shell : `systemctl`, `docker` et
+`qm`/`pct` reçoivent un argv fixe après double validation (grammaire stricte
+puis liste d'autorisation). Voir la section `actions` de la configuration :
+
+- `services` — motifs glob d'unités systemd (`start`, `stop`, `restart`) ;
+- `containers` — motifs glob de noms Docker (`start`, `stop`, `restart`) ;
+- `vms` — identifiants VM/CT Proxmox (`start`, `stop`, `reboot`, `shutdown`).
+
+Une liste vide **refuse tout** : l'agent reste en lecture seule (l'inventaire
+marque chaque service/conteneur/machine `controllable: false`) jusqu'à ce que
+son opérateur autorise explicitement des cibles.
 
 ## Snapshot transmis
 
@@ -87,14 +115,17 @@ cœurs), mémoire + swap, volumes de stockage, interfaces réseau, services
 - Pas d'exécution shell arbitraire à distance.
 - Docker et Proxmox sont des capacités optionnelles, pas des dépendances.
 - Un fournisseur absent ne doit pas empêcher l'inventaire hôte de fonctionner.
-- Les actions à distance utiliseront une liste explicite.
+- Les actions à distance utilisent une liste d'autorisation explicite (défaut : rien).
 - L'inventaire en lecture seule précède toute administration à distance.
 
 ## Portée actuelle
 
-Version `0.1.0-dev` fournit :
+Version `1.1.0` fournit :
 
 - identité d'agent persistante (agent_id, hostname)
+- **version d'agent** envoyée avec chaque snapshot et exposée sur `/health`
+  (`X-Argos-Agent-Version`) : le master affiche un avertissement **Mise à jour**
+  quand un agent est plus ancien que la version attendue
 - OS / noyau / architecture / IP
 - CPU : usage %, load 1/5/15, nombre de cœurs
 - mémoire et swap
@@ -103,6 +134,8 @@ Version `0.1.0-dev` fournit :
 - services systemd (Linux), conteneurs Docker, VM/CT Proxmox
 - détection des capacités (Docker, systemd, Proxmox, Windows Services, launchd)
 - association push avec demandes approuvées/refusées par le master
+- actions typées à distance (services, conteneurs, VM/CT) sur liste d'autorisation
+  explicite, en pull direct ou via file de commandes push
 - diagnostic local et inventaire JSON
 
 Prochaines étapes : installation en service natif, plus de détails

@@ -11,9 +11,11 @@ import (
 	"os/exec"
 	"strings"
 	"time"
+
+	"github.com/Bissiking/argos-prob/internal/actions"
 )
 
-func collectServices() []ServiceInfo {
+func collectServices(policy actions.Policy) []ServiceInfo {
 	systemctl, err := exec.LookPath("systemctl")
 	if err != nil {
 		return nil
@@ -36,13 +38,13 @@ func collectServices() []ServiceInfo {
 		out = append(out, ServiceInfo{
 			Name: unit.Unit, Description: unit.Description,
 			ActiveState: unit.Active, SubState: unit.Sub,
-			Controllable: true,
+			Controllable: policy.Controllable(actions.CategoryService, unit.Unit, 0),
 		})
 	}
 	return out
 }
 
-func collectDocker() []DockerContainer {
+func collectDocker(policy actions.Policy) []DockerContainer {
 	docker, err := exec.LookPath("docker")
 	if err != nil {
 		return nil
@@ -75,14 +77,17 @@ func collectDocker() []DockerContainer {
 		if len(id) > 12 {
 			id = id[:12]
 		}
+		name := strings.Split(item.Names, ",")[0]
+		name = strings.TrimSpace(name)
 		containers = append(containers, DockerContainer{
-			ID: id, Name: item.Names, Image: item.Image, State: state, Status: item.Status, Ports: item.Ports,
+			ID: id, Name: name, Image: item.Image, State: state, Status: item.Status, Ports: item.Ports,
+			Controllable: policy.Controllable(actions.CategoryContainer, name, 0),
 		})
 	}
 	return containers
 }
 
-func collectProxmox() []ProxmoxGuest {
+func collectProxmox(policy actions.Policy) []ProxmoxGuest {
 	pvesh, err := exec.LookPath("pvesh")
 	if err != nil {
 		return nil
@@ -117,6 +122,7 @@ func collectProxmox() []ProxmoxGuest {
 			ID: r.Vmid, Name: r.Name, Type: r.Type, Node: r.Node, Status: r.Status,
 			CPU: r.CPU, MaxMemory: r.MaxMem, Memory: r.Mem,
 			MaxDisk: r.MaxDisk, Disk: r.Disk, Uptime: r.Uptime, Template: r.Template != 0,
+			Controllable: policy.Controllable(actions.CategoryProxmox, "", r.Vmid),
 		})
 	}
 	return guests

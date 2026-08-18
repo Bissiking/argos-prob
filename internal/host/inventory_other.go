@@ -3,14 +3,16 @@
 
 package host
 
-func collectServices() []ServiceInfo {
+import "github.com/Bissiking/argos-prob/internal/actions"
+
+func collectServices(_ actions.Policy) []ServiceInfo {
 	return nil
 }
 
-func collectDocker() []DockerContainer {
+func collectDocker(_ actions.Policy) []DockerContainer {
 	return nil
 }
 
-func collectProxmox() []ProxmoxGuest {
+func collectProxmox(_ actions.Policy) []ProxmoxGuest {
 	return nil
 }

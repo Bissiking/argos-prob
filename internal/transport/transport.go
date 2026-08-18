@@ -12,12 +12,15 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+	"strconv"
 	"strings"
 	"time"
 
+	"github.com/Bissiking/argos-prob/internal/actions"
 	"github.com/Bissiking/argos-prob/internal/capabilities"
 	"github.com/Bissiking/argos-prob/internal/config"
 	"github.com/Bissiking/argos-prob/internal/host"
+	"github.com/Bissiking/argos-prob/internal/version"
 )
 
 const userAgent = "argos-prob"
@@ -122,12 +125,123 @@ watch:
 			log.Printf("push failed: %v", err)
 		}
 
+		if err := refreshCommands(ctx, client, cfg); err != nil {
+			if errors.Is(err, ErrNotApproved) {
+				log.Printf("association révoquée — retour en attente")
+				time.Sleep(retryDelay)
+				goto watch
+			}
+			log.Printf("commandes maîtresses injoignables: %v", err)
+		}
+
 		select {
 		case <-ctx.Done():
 			return nil
 		case <-time.After(interval):
 		}
 	}
+}
+
+// runCommand executes a typed command locally, provided the operator
+// explicitly allowed it through the configuration allowlist.
+func runCommand(cfg config.Config, cmd actions.Command) (string, error) {
+	if !cfg.ActionPolicy().Allows(cmd) {
+		return "", fmt.Errorf("action non autorisée par la liste d'autorisation Argos Prob (%s %s)", cmd.Category, cmd.Target)
+	}
+	return actions.Execute(cmd)
+}
+
+// pendingCommand is a queued typed operation the master can't reach the agent
+// with in passive (push) mode: the master stores it and the agent pulls it.
+type pendingCommand struct {
+	ID          string `json:"id"`
+	Category    string `json:"category"`
+	Target      string `json:"target"`
+	Action      string `json:"action"`
+	ProxmoxType string `json:"proxmoxType,omitempty"`
+}
+
+// refreshCommands pulls the pending commands from the master, executes each
+// allowed one locally and reports the result. It returns ErrNotApproved when
+// the association was revoked.
+func refreshCommands(ctx context.Context, client *http.Client, cfg config.Config) error {
+	cmds, err := fetchPendingCommands(ctx, client, cfg)
+	if err != nil {
+		return err
+	}
+	for _, cmd := range cmds {
+		command := actions.Command{Category: cmd.Category, Target: cmd.Target, Action: cmd.Action, Kind: cmd.ProxmoxType}
+		if cmd.Category == actions.CategoryProxmox {
+			vmid, convErr := strconv.Atoi(cmd.Target)
+			if convErr != nil {
+				_ = reportCommandResult(ctx, client, cfg, cmd.ID, false, "identifiant de machine invalide")
+				continue
+			}
+			command.VMID = vmid
+		}
+		output, err := runCommand(cfg, command)
+		ok := err == nil
+		if err != nil {
+			output = err.Error()
+		}
+		log.Printf("commande maîtresse exécutée (%s %s %s): %s", cmd.Category, cmd.Action, cmd.Target, output)
+		if reportErr := reportCommandResult(ctx, client, cfg, cmd.ID, ok, output); reportErr != nil {
+			log.Printf("rapport de commande impossible: %v", reportErr)
+		}
+	}
+	return nil
+}
+
+func fetchPendingCommands(ctx context.Context, client *http.Client, cfg config.Config) ([]pendingCommand, error) {
+	endpoint := baseURL(cfg.Endpoint) + agentsPath("/commands") + "?token=" + url.QueryEscape(cfg.Token)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoint, nil)
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Set("User-Agent", userAgent)
+	resp, err := client.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+	raw, _ := io.ReadAll(resp.Body)
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		return nil, agentError(resp.StatusCode, raw)
+	}
+	if len(bytes.TrimSpace(raw)) == 0 {
+		return nil, nil
+	}
+	var out []pendingCommand
+	if err := json.Unmarshal(raw, &out); err != nil {
+		return nil, fmt.Errorf("commands: réponse illisible: %w", err)
+	}
+	return out, nil
+}
+
+func reportCommandResult(ctx context.Context, client *http.Client, cfg config.Config, id string, ok bool, output string) error {
+	payload, _ := json.Marshal(commandResultPayload{Token: cfg.Token, OK: ok, Output: output})
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, baseURL(cfg.Endpoint)+agentsPath("/commands/"+id+"/result"), bytes.NewReader(payload))
+	if err != nil {
+		return err
+	}
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("User-Agent", userAgent)
+	resp, err := client.Do(req)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+	body, _ := io.ReadAll(resp.Body)
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		return agentError(resp.StatusCode, body)
+	}
+	return nil
+}
+
+type commandResultPayload struct {
+	Token  string `json:"token"`
+	OK     bool   `json:"ok"`
+	Output string `json:"output,omitempty"`
 }
 
 // Serve runs the active mode: the agent exposes a local endpoint that Argos
@@ -137,6 +251,9 @@ func Serve(ctx context.Context, cfg config.Config) error {
 	mux.HandleFunc("/health", health(cfg))
 	mux.HandleFunc("/metrics", metrics(cfg))
 	mux.HandleFunc("/api/v1/snapshot", snapshotV1(cfg))
+	mux.HandleFunc("POST /api/v1/services/{unit}/{action}", actionV1(cfg, actions.CategoryService))
+	mux.HandleFunc("POST /api/v1/containers/{name}/{action}", actionV1(cfg, actions.CategoryContainer))
+	mux.HandleFunc("POST /api/v1/proxmox/{kind}/{vmid}/{action}", actionV1(cfg, actions.CategoryProxmox))
 
 	srv := &http.Server{Addr: cfg.Address(), Handler: mux}
 	errCh := make(chan error, 1)
@@ -159,6 +276,7 @@ func Serve(ctx context.Context, cfg config.Config) error {
 func health(cfg config.Config) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("X-Argos-Agent-ID", cfg.AgentID)
+		w.Header().Set("X-Argos-Agent-Version", version.Version)
 		fmt.Fprintln(w, "ok")
 	}
 }
@@ -186,7 +304,51 @@ func metrics(cfg config.Config) http.HandlerFunc {
 }
 
 func collect(cfg config.Config) (host.Snapshot, error) {
-	return host.Collect(cfg.AgentID, capabilities.Detect())
+	return host.Collect(cfg.AgentID, capabilities.Detect(), cfg.ActionPolicy())
+}
+
+// actionV1 builds the typed-operation handler for a category. Every target is
+// validated twice: strictly here (defense in depth) and against the operator
+// allowlist before any process is launched.
+func actionV1(cfg config.Config, category string) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		if !authorized(r, cfg.Token) {
+			http.Error(w, "unauthorized", http.StatusUnauthorized)
+			return
+		}
+		cmd := actions.Command{Category: category, Action: r.PathValue("action")}
+		switch category {
+		case actions.CategoryService:
+			cmd.Target = r.PathValue("unit")
+		case actions.CategoryContainer:
+			cmd.Target = r.PathValue("name")
+		case actions.CategoryProxmox:
+			cmd.Kind = r.PathValue("kind")
+			vmid, err := strconv.Atoi(r.PathValue("vmid"))
+			if err != nil || vmid <= 0 {
+				http.Error(w, "identifiant de machine invalide", http.StatusBadRequest)
+				return
+			}
+			cmd.VMID = vmid
+		}
+		output, err := runCommand(cfg, cmd)
+		if err != nil {
+			writeJSONError(w, err.Error(), http.StatusBadRequest)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		if err := json.NewEncoder(w).Encode(map[string]string{"ok": "true", "action": cmd.Action, "output": output}); err != nil {
+			log.Printf("encode failed: %v", err)
+		}
+	}
+}
+
+func writeJSONError(w http.ResponseWriter, message string, status int) {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(status)
+	if err := json.NewEncoder(w).Encode(map[string]string{"message": message}); err != nil {
+		log.Printf("encode failed: %v", err)
+	}
 }
 
 func syncWithMaster(ctx context.Context, client *http.Client, base, token, hostname string) (string, int, error) {

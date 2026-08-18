@@ -11,6 +11,8 @@ import (
 	"path/filepath"
 	"runtime"
 	"time"
+
+	"github.com/Bissiking/argos-prob/internal/actions"
 )
 
 const (
@@ -18,14 +20,32 @@ const (
 	ModeActive  = "active"
 )
 
+type Actions struct {
+	Services   []string `json:"services,omitempty"`
+	Containers []string `json:"containers,omitempty"`
+	VMs        []int    `json:"vms,omitempty"`
+}
+
 type Config struct {
-	AgentID      string `json:"agent_id"`
-	Name         string `json:"name,omitempty"`
-	Mode         string `json:"mode,omitempty"`
-	Endpoint     string `json:"endpoint,omitempty"`
-	Token        string `json:"token,omitempty"`
-	PushInterval uint64 `json:"push_interval_seconds,omitempty"`
-	ListenAddr   string `json:"listen_addr,omitempty"`
+	AgentID      string  `json:"agent_id"`
+	Name         string  `json:"name,omitempty"`
+	Mode         string  `json:"mode,omitempty"`
+	Endpoint     string  `json:"endpoint,omitempty"`
+	Token        string  `json:"token,omitempty"`
+	PushInterval uint64  `json:"push_interval_seconds,omitempty"`
+	ListenAddr   string  `json:"listen_addr,omitempty"`
+	Actions      Actions `json:"actions,omitempty"`
+}
+
+// ActionPolicy builds the remote-control allowlist from the configuration.
+// An empty allowlist forbids every remote action: the agent stays read-only
+// until its operator explicitly authorizes services, containers and VMs.
+func (c Config) ActionPolicy() actions.Policy {
+	return actions.Policy{
+		Services:   c.Actions.Services,
+		Containers: c.Actions.Containers,
+		VMs:        c.Actions.VMs,
+	}
 }
 
 func (c Config) TransportMode() string {
