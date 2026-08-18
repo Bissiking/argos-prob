@@ -7,7 +7,9 @@ import (
 	"strings"
 	"time"
 
+	"github.com/Bissiking/argos-prob/internal/actions"
 	"github.com/Bissiking/argos-prob/internal/capabilities"
+	"github.com/Bissiking/argos-prob/internal/version"
 )
 
 // Snapshot is the host inventory as expected by the Argos master
@@ -15,6 +17,7 @@ import (
 type Snapshot struct {
 	CollectedAt  time.Time          `json:"collectedAt"`
 	AgentID      string             `json:"agentId,omitempty"`
+	Version      string             `json:"version"`
 	Hostname     string             `json:"hostname"`
 	IP           *string            `json:"ip"`
 	OS           string             `json:"os"`
@@ -89,6 +92,9 @@ type DockerContainer struct {
 	State  string `json:"state"`
 	Status string `json:"status"`
 	Ports  string `json:"ports"`
+	// Controllable is true when the container matches the operator's
+	// allowlist (internal/actions.Policy).
+	Controllable bool `json:"controllable"`
 }
 
 type ProxmoxGuest struct {
@@ -104,6 +110,8 @@ type ProxmoxGuest struct {
 	Disk      uint64  `json:"disk"`
 	Uptime    uint64  `json:"uptime"`
 	Template  bool    `json:"template"`
+	// Controllable mirrors the allowlist, like services and containers.
+	Controllable bool `json:"controllable"`
 }
 
 // ifStats carries the per-interface counters the platform layer can provide.
@@ -127,7 +135,7 @@ type platformSnapshot struct {
 	Network map[string]ifStats
 }
 
-func Collect(agentID string, caps capabilities.Capabilities) (Snapshot, error) {
+func Collect(agentID string, caps capabilities.Capabilities, policy actions.Policy) (Snapshot, error) {
 	hostname, err := os.Hostname()
 	if err != nil {
 		return Snapshot{}, err
@@ -138,21 +146,22 @@ func Collect(agentID string, caps capabilities.Capabilities) (Snapshot, error) {
 	}
 	ifaces := networkInterfaces(p.Network)
 	ip := primaryIPv4(ifaces)
-	services := collectServices()
+	services := collectServices(policy)
 	if services == nil {
 		services = []ServiceInfo{}
 	}
-	docker := collectDocker()
+	docker := collectDocker(policy)
 	if docker == nil {
 		docker = []DockerContainer{}
 	}
-	proxmox := collectProxmox()
+	proxmox := collectProxmox(policy)
 	if proxmox == nil {
 		proxmox = []ProxmoxGuest{}
 	}
 	return Snapshot{
 		CollectedAt:  time.Now().UTC(),
 		AgentID:      agentID,
+		Version:      version.Version,
 		Hostname:     hostname,
 		IP:           ip,
 		OS:           p.OS,

@@ -16,9 +16,8 @@ import (
 	"github.com/Bissiking/argos-prob/internal/doctor"
 	"github.com/Bissiking/argos-prob/internal/host"
 	"github.com/Bissiking/argos-prob/internal/transport"
+	"github.com/Bissiking/argos-prob/internal/version"
 )
-
-const version = "0.1.0-dev"
 
 func main() {
 	if len(os.Args) < 2 {
@@ -35,7 +34,7 @@ func main() {
 	case "doctor":
 		err = runDoctor()
 	case "version", "--version", "-v":
-		fmt.Println(version)
+		fmt.Println(version.Version)
 	case "run":
 		err = runRun()
 	case "help", "--help", "-h":
@@ -166,7 +165,7 @@ func runStatus() error {
 	if err != nil {
 		return err
 	}
-	snapshot, err := host.Collect(cfg.AgentID, capabilities.Detect())
+	snapshot, err := host.Collect(cfg.AgentID, capabilities.Detect(), cfg.ActionPolicy())
 	if err != nil {
 		return err
 	}
