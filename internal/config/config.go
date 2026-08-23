@@ -149,6 +149,16 @@ func Save(path string, cfg Config) error {
 	return write(path, cfg)
 }
 
+// SaveConfig persists the configuration to the default path for the current
+// platform. This is the convenience variant used by the transport layer.
+func SaveConfig(cfg Config) error {
+	path, err := Path()
+	if err != nil {
+		return err
+	}
+	return Save(path, cfg)
+}
+
 func write(path string, cfg Config) error {
 	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
 		return err

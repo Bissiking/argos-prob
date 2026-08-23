@@ -40,9 +40,10 @@ type registrationResponse struct {
 }
 
 type configResponse struct {
-	Mode       string `json:"mode"`
-	Status     string `json:"status"` // pending | approved | rejected
-	IntervalMs int    `json:"intervalMs,omitempty"`
+	Mode       string          `json:"mode"`
+	Status     string          `json:"status"` // pending | approved | rejected
+	IntervalMs int             `json:"intervalMs,omitempty"`
+	Actions    json.RawMessage `json:"actions,omitempty"`
 }
 
 type metricsPayload struct {
@@ -81,6 +82,7 @@ func PushLoop(ctx context.Context, cfg config.Config) error {
 	}
 
 	interval := retryDelay
+	var actions json.RawMessage
 watch:
 	for {
 		select {
@@ -88,7 +90,7 @@ watch:
 			return nil
 		default:
 		}
-		status, intervalMs, err := syncWithMaster(ctx, client, base, cfg.Token, hostname)
+		status, intervalMs, masterActions, err := syncWithMaster(ctx, client, base, cfg.Token, hostname)
 		if err != nil {
 			log.Printf("master injoignable (%v) — nouvelle tentative dans %s", err, retryDelay)
 		} else {
@@ -96,6 +98,9 @@ watch:
 			case "approved":
 				if intervalMs > 0 {
 					interval = time.Duration(intervalMs) * time.Millisecond
+				}
+				if masterActions != nil {
+					actions = masterActions
 				}
 				log.Printf("association approuvée : poussée toutes les %s vers %s/api/v1/agents/metrics", interval, base)
 				break watch
@@ -109,6 +114,18 @@ watch:
 		case <-ctx.Done():
 			return nil
 		case <-time.After(retryDelay):
+		}
+	}
+
+	if actions != nil {
+		var a config.Actions
+		if json.Unmarshal(actions, &a) == nil && (len(a.Services) > 0 || len(a.Containers) > 0 || len(a.VMs) > 0) {
+			cfg.Actions = a
+			if err := config.SaveConfig(cfg); err != nil {
+				log.Printf("sauvegarde des actions depuis le master échouée: %v", err)
+			} else {
+				log.Printf("actions synchronisées depuis le master: %d services, %d conteneurs, %d VMs", len(a.Services), len(a.Containers), len(a.VMs))
+			}
 		}
 	}
 
@@ -351,23 +368,23 @@ func writeJSONError(w http.ResponseWriter, message string, status int) {
 	}
 }
 
-func syncWithMaster(ctx context.Context, client *http.Client, base, token, hostname string) (string, int, error) {
+func syncWithMaster(ctx context.Context, client *http.Client, base, token, hostname string) (string, int, json.RawMessage, error) {
 	reg, err := register(ctx, client, base, token, hostname)
 	if err != nil {
-		return "", 0, err
+		return "", 0, nil, err
 	}
 	if reg.Status == "rejected" {
-		return "rejected", 0, nil
+		return "rejected", 0, nil, nil
 	}
 	conf, err := fetchConfig(ctx, client, base, token)
 	if err != nil {
-		return "", 0, err
+		return "", 0, nil, err
 	}
 	intervalMs := conf.IntervalMs
 	if intervalMs <= 0 {
 		intervalMs = reg.IntervalMs
 	}
-	return conf.Status, intervalMs, nil
+	return conf.Status, intervalMs, conf.Actions, nil
 }
 
 func register(ctx context.Context, client *http.Client, base, token, hostname string) (registrationResponse, error) {
