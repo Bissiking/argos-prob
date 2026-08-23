@@ -4,4 +4,6 @@ argos-prob.exe
 *.log
 /dist/
 /tmp/
+packaging/rpm-build/
+packaging/*/
 .DS_Store
