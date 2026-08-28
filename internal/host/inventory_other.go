@@ -1,5 +1,5 @@
 // internal/host/inventory_other.go
-//go:build !linux
+//go:build !linux && !windows
 
 package host
 

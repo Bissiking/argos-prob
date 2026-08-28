@@ -129,11 +129,7 @@ func Execute(cmd Command) (string, error) {
 func (c Command) argv() (string, []string, error) {
 	switch c.Category {
 	case CategoryService:
-		bin, err := exec.LookPath("systemctl")
-		if err != nil {
-			return "", nil, errors.New("systemctl introuvable : contrôles de services indisponibles sur cet hôte")
-		}
-		return bin, []string{c.Action, c.Target}, nil
+		return serviceArgv(c.Action, c.Target)
 	case CategoryContainer:
 		bin, err := exec.LookPath("docker")
 		if err != nil {

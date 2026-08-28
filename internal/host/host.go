@@ -35,9 +35,10 @@ type Snapshot struct {
 }
 
 type Capabilities struct {
-	Systemd bool `json:"systemd"`
-	Docker  bool `json:"docker"`
-	Proxmox bool `json:"proxmox"`
+	Systemd         bool `json:"systemd"`
+	WindowsServices bool `json:"windowsServices,omitempty"`
+	Docker          bool `json:"docker"`
+	Proxmox         bool `json:"proxmox"`
 }
 
 type CpuSnapshot struct {
@@ -168,15 +169,25 @@ func Collect(agentID string, caps capabilities.Capabilities, policy actions.Poli
 		Kernel:       p.Kernel,
 		Architecture: p.Arch,
 		Uptime:       p.Uptime,
-		Capabilities: Capabilities{Systemd: caps.Systemd, Docker: caps.Docker, Proxmox: caps.Proxmox},
-		CPU:          p.CPU,
-		Memory:       p.Memory,
-		Storage:      p.Storage,
-		Network:      ifaces,
-		Services:     services,
-		Docker:       docker,
-		Proxmox:      proxmox,
+		// The current master uses systemd as its generic "service manager"
+		// capability. Keep it enabled for Windows compatibility while also
+		// publishing the precise capability for newer masters.
+		Capabilities: snapshotCapabilities(caps),
+		CPU:      p.CPU,
+		Memory:   p.Memory,
+		Storage:  p.Storage,
+		Network:  ifaces,
+		Services: services,
+		Docker:   docker,
+		Proxmox:  proxmox,
 	}, nil
+}
+
+func snapshotCapabilities(caps capabilities.Capabilities) Capabilities {
+	return Capabilities{
+		Systemd: caps.Systemd || caps.WindowsServices, WindowsServices: caps.WindowsServices,
+		Docker: caps.Docker, Proxmox: caps.Proxmox,
+	}
 }
 
 func networkInterfaces(counters map[string]ifStats) []NetworkInterface {

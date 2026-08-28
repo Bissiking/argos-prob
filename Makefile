@@ -1,5 +1,5 @@
 APP_NAME   := argos-prob
-VERSION    ?= $(shell grep -oP 'Version\s*=\s*"\K[^"]+' internal/version/version.go 2>/dev/null || echo "1.2.0")
+VERSION    ?= $(shell grep -oP 'Version\s*=\s*"\K[^"]+' internal/version/version.go 2>/dev/null || echo "1.3.0")
 MODULE     := github.com/Bissiking/argos-prob
 BUILD_DIR  := dist
 CMD_DIR    := cmd/argos-prob

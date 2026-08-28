@@ -5,53 +5,49 @@ package host
 
 import (
 	"encoding/json"
-	"os/exec"
 	"runtime"
-	"strconv"
-	"strings"
 )
 
-type windowsStats struct {
-	TotalVisibleMemorySize uint64 `json:"TotalVisibleMemorySize"`
-	FreePhysicalMemory     uint64 `json:"FreePhysicalMemory"`
-	LastBootUpTime         string `json:"LastBootUpTime"`
-	LocalDateTime          string `json:"LocalDateTime"`
-}
-
 func collectPlatform() (platformSnapshot, error) {
-	mem, uptime, err := windowsMemoryAndUptime()
+	payload, err := collectWindowsSnapshot()
 	if err != nil {
 		return platformSnapshot{}, err
 	}
-	cpu := CpuSnapshot{Load: [3]float64{}, Cores: runtime.NumCPU()}
+	mem, uptime, cpu, storage := windowsPlatformValues(payload)
 	return platformSnapshot{
-		OS: "Windows", Kernel: "Windows",
+		OS: "Windows", Kernel: payload.Version,
 		Arch: archLabel(runtime.GOARCH), Uptime: uptime,
-		Memory: mem, CPU: cpu, Storage: []StorageVolume{}, Network: map[string]ifStats{},
+		Memory: mem, CPU: cpu, Storage: storage, Network: map[string]ifStats{},
 	}, nil
 }
 
-func windowsMemoryAndUptime() (MemorySnapshot, uint64, error) {
-	script := `$os = Get-CimInstance Win32_OperatingSystem | Select-Object TotalVisibleMemorySize,FreePhysicalMemory,LastBootUpTime,LocalDateTime; $os | ConvertTo-Json -Compress`
-	raw, err := exec.Command("powershell.exe", "-NoLogo", "-NoProfile", "-NonInteractive", "-Command", script).Output()
+func collectWindowsSnapshot() (windowsSnapshotPayload, error) {
+	script := `$ErrorActionPreference = 'Stop'
+$os = Get-CimInstance Win32_OperatingSystem
+$cpuUsage = 0
+try {
+  $cpuUsage = [double](Get-CimInstance Win32_PerfFormattedData_PerfOS_Processor -Filter "Name='_Total'").PercentProcessorTime
+} catch {
+  $values = @(Get-CimInstance Win32_Processor | ForEach-Object { [double]$_.LoadPercentage })
+  if ($values.Count -gt 0) { $cpuUsage = [double](($values | Measure-Object -Average).Average) }
+}
+$disks = @()
+try { $disks = @(Get-CimInstance Win32_LogicalDisk -Filter "DriveType=3" | Select-Object DeviceID,FileSystem,Size,FreeSpace) } catch {}
+[pscustomobject]@{
+  TotalVisibleMemorySize = [uint64]$os.TotalVisibleMemorySize
+  FreePhysicalMemory = [uint64]$os.FreePhysicalMemory
+  UptimeSeconds = [uint64]((Get-Date) - $os.LastBootUpTime).TotalSeconds
+  Version = [string]$os.Version
+  CPUUsage = $cpuUsage
+  Disks = $disks
+} | ConvertTo-Json -Compress -Depth 4`
+	raw, err := runPowerShell(script)
 	if err != nil {
-		return MemorySnapshot{}, 0, err
+		return windowsSnapshotPayload{}, err
 	}
-	var s windowsStats
-	if err := json.Unmarshal(raw, &s); err != nil {
-		return MemorySnapshot{}, 0, err
+	var payload windowsSnapshotPayload
+	if err := json.Unmarshal(raw, &payload); err != nil {
+		return windowsSnapshotPayload{}, err
 	}
-	total := s.TotalVisibleMemorySize * 1024
-	free := s.FreePhysicalMemory * 1024
-
-	uptimeRaw, err := exec.Command("powershell.exe", "-NoLogo", "-NoProfile", "-NonInteractive", "-Command", "[int64]((Get-Date)-(Get-CimInstance Win32_OperatingSystem).LastBootUpTime).TotalSeconds").Output()
-	if err != nil {
-		return MemorySnapshot{}, 0, err
-	}
-	uptime, _ := strconv.ParseUint(strings.TrimSpace(string(uptimeRaw)), 10, 64)
-	used := total - free
-	if free > total {
-		used = 0
-	}
-	return MemorySnapshot{Total: total, Used: used}, uptime, nil
+	return payload, nil
 }
