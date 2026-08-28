@@ -74,7 +74,7 @@ Pour le développement, surcharger le chemin avec `ARGOS_PROB_CONFIG`.
   "endpoint": "https://argos.example.net",
   "token": "AR-…",
   "actions": {
-    "services": ["nginx.service", "backup-*.service"],
+    "services": ["nginx.service", "backup-*.service", "Spooler"],
     "containers": ["nextcloud*"],
     "vms": [100, 104]
   }
@@ -92,11 +92,13 @@ il **queue la commande** dans `server_commands` et l'agent la tire au fil de sa
 boucle via `GET /api/v1/agents/commands`, l'exécute localement et renvoie le
 résultat.
 
-Chaque opération est **typée** — jamais de shell : `systemctl`, `docker` et
-`qm`/`pct` reçoivent un argv fixe après double validation (grammaire stricte
-puis liste d'autorisation). Voir la section `actions` de la configuration :
+Chaque opération est **typée** — jamais de shell : `systemctl`, PowerShell,
+`docker` et `qm`/`pct` reçoivent un argv fixe après double validation
+(grammaire stricte puis liste d'autorisation). Voir la section `actions` de la
+configuration :
 
-- `services` — motifs glob d'unités systemd (`start`, `stop`, `restart`) ;
+- `services` — motifs glob d'unités systemd ou de noms de services Windows
+  (`start`, `stop`, `restart`) ;
 - `containers` — motifs glob de noms Docker (`start`, `stop`, `restart`) ;
 - `vms` — identifiants VM/CT Proxmox (`start`, `stop`, `reboot`, `shutdown`).
 
@@ -108,7 +110,7 @@ son opérateur autorise explicitement des cibles.
 
 Le snapshot correspond au contrat `AgentSnapshot` du master : CPU (usage, load,
 cœurs), mémoire + swap, volumes de stockage, interfaces réseau, services
-(systemd), conteneurs Docker et VM/CT Proxmox.
+(systemd ou Windows), conteneurs Docker et VM/CT Proxmox.
 
 ## Principes de sécurité
 
@@ -131,7 +133,7 @@ Version `1.1.0` fournit :
 - mémoire et swap
 - volumes de stockage (taille, utilisé, disponible, usage %)
 - interfaces réseau (adresses, état, débit, octets RX/TX)
-- services systemd (Linux), conteneurs Docker, VM/CT Proxmox
+- services systemd (Linux) et Windows, conteneurs Docker, VM/CT Proxmox
 - détection des capacités (Docker, systemd, Proxmox, Windows Services, launchd)
 - association push avec demandes approuvées/refusées par le master
 - actions typées à distance (services, conteneurs, VM/CT) sur liste d'autorisation

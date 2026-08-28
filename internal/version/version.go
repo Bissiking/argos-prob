@@ -5,4 +5,4 @@ package version
 // snapshot sent to the master (host.Snapshot.Version) and exposed on the
 // active-mode /health endpoint. The master warns when an agent is older
 // than its expected LATEST_AGENT_VERSION.
-const Version = "1.2.0"
+const Version = "1.3.0"
