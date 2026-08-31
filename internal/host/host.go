@@ -15,23 +15,25 @@ import (
 // Snapshot is the host inventory as expected by the Argos master
 // (packages/contracts AgentSnapshot). Keys follow the master camelCase.
 type Snapshot struct {
-	CollectedAt  time.Time          `json:"collectedAt"`
-	AgentID      string             `json:"agentId,omitempty"`
-	Version      string             `json:"version"`
-	Hostname     string             `json:"hostname"`
-	IP           *string            `json:"ip"`
-	OS           string             `json:"os"`
-	Kernel       string             `json:"kernel"`
-	Architecture string             `json:"architecture"`
-	Uptime       uint64             `json:"uptime"`
-	Capabilities Capabilities       `json:"capabilities"`
-	CPU          CpuSnapshot        `json:"cpu"`
-	Memory       MemorySnapshot     `json:"memory"`
-	Storage      []StorageVolume    `json:"storage"`
-	Network      []NetworkInterface `json:"network"`
-	Services     []ServiceInfo      `json:"services"`
-	Docker       []DockerContainer  `json:"docker"`
-	Proxmox      []ProxmoxGuest     `json:"proxmox"`
+	CollectedAt    time.Time               `json:"collectedAt"`
+	AgentID        string                  `json:"agentId,omitempty"`
+	Version        string                  `json:"version"`
+	Hostname       string                  `json:"hostname"`
+	IP             *string                 `json:"ip"`
+	OS             string                  `json:"os"`
+	Kernel         string                  `json:"kernel"`
+	Architecture   string                  `json:"architecture"`
+	Uptime         uint64                  `json:"uptime"`
+	Capabilities   Capabilities            `json:"capabilities"`
+	Virtualization *VirtualizationIdentity `json:"virtualization,omitempty"`
+	CPU            CpuSnapshot             `json:"cpu"`
+	Memory         MemorySnapshot          `json:"memory"`
+	Storage        []StorageVolume         `json:"storage"`
+	Network        []NetworkInterface      `json:"network"`
+	Sockets        []NetworkSocket         `json:"sockets"`
+	Services       []ServiceInfo           `json:"services"`
+	Docker         []DockerContainer       `json:"docker"`
+	Proxmox        []ProxmoxGuest          `json:"proxmox"`
 }
 
 type Capabilities struct {
@@ -39,6 +41,25 @@ type Capabilities struct {
 	WindowsServices bool `json:"windowsServices,omitempty"`
 	Docker          bool `json:"docker"`
 	Proxmox         bool `json:"proxmox"`
+	Topology        bool `json:"topology"`
+}
+
+type VirtualizationIdentity struct {
+	Kind          string  `json:"kind"`
+	Provider      *string `json:"provider"`
+	ProductUUID   *string `json:"productUuid"`
+	MachineIDHash *string `json:"machineIdHash"`
+}
+
+type NetworkSocket struct {
+	Protocol      string  `json:"protocol"`
+	State         string  `json:"state"`
+	LocalAddress  string  `json:"localAddress"`
+	LocalPort     int     `json:"localPort"`
+	RemoteAddress *string `json:"remoteAddress"`
+	RemotePort    *int    `json:"remotePort"`
+	PID           *uint64 `json:"pid"`
+	Process       *string `json:"process"`
 }
 
 type CpuSnapshot struct {
@@ -87,15 +108,23 @@ type ServiceInfo struct {
 }
 
 type DockerContainer struct {
-	ID     string `json:"id"`
-	Name   string `json:"name"`
-	Image  string `json:"image"`
-	State  string `json:"state"`
-	Status string `json:"status"`
-	Ports  string `json:"ports"`
+	ID       string            `json:"id"`
+	Name     string            `json:"name"`
+	Image    string            `json:"image"`
+	State    string            `json:"state"`
+	Status   string            `json:"status"`
+	Ports    string            `json:"ports"`
+	Labels   map[string]string `json:"labels,omitempty"`
+	Networks []DockerNetwork   `json:"networks,omitempty"`
 	// Controllable is true when the container matches the operator's
 	// allowlist (internal/actions.Policy).
 	Controllable bool `json:"controllable"`
+}
+
+type DockerNetwork struct {
+	Name      string  `json:"name"`
+	IPAddress *string `json:"ipAddress"`
+	Gateway   *string `json:"gateway"`
 }
 
 type ProxmoxGuest struct {
@@ -112,7 +141,9 @@ type ProxmoxGuest struct {
 	Uptime    uint64  `json:"uptime"`
 	Template  bool    `json:"template"`
 	// Controllable mirrors the allowlist, like services and containers.
-	Controllable bool `json:"controllable"`
+	Controllable bool    `json:"controllable"`
+	UUID         *string `json:"uuid,omitempty"`
+	Hostname     *string `json:"hostname,omitempty"`
 }
 
 // ifStats carries the per-interface counters the platform layer can provide.
@@ -172,21 +203,23 @@ func Collect(agentID string, caps capabilities.Capabilities, policy actions.Poli
 		// The current master uses systemd as its generic "service manager"
 		// capability. Keep it enabled for Windows compatibility while also
 		// publishing the precise capability for newer masters.
-		Capabilities: snapshotCapabilities(caps),
-		CPU:      p.CPU,
-		Memory:   p.Memory,
-		Storage:  p.Storage,
-		Network:  ifaces,
-		Services: services,
-		Docker:   docker,
-		Proxmox:  proxmox,
+		Capabilities:   snapshotCapabilities(caps),
+		CPU:            p.CPU,
+		Memory:         p.Memory,
+		Storage:        p.Storage,
+		Network:        ifaces,
+		Services:       services,
+		Docker:         docker,
+		Proxmox:        proxmox,
+		Virtualization: collectVirtualizationIdentity(),
+		Sockets:        collectSockets(),
 	}, nil
 }
 
 func snapshotCapabilities(caps capabilities.Capabilities) Capabilities {
 	return Capabilities{
 		Systemd: caps.Systemd || caps.WindowsServices, WindowsServices: caps.WindowsServices,
-		Docker: caps.Docker, Proxmox: caps.Proxmox,
+		Docker: caps.Docker, Proxmox: caps.Proxmox, Topology: true,
 	}
 }
 
