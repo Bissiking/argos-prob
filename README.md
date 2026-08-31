@@ -122,7 +122,7 @@ cœurs), mémoire + swap, volumes de stockage, interfaces réseau, services
 
 ## Portée actuelle
 
-Version `1.1.0` fournit :
+Version `1.4.0` fournit :
 
 - identité d'agent persistante (agent_id, hostname)
 - **version d'agent** envoyée avec chaque snapshot et exposée sur `/health`
@@ -134,6 +134,10 @@ Version `1.1.0` fournit :
 - volumes de stockage (taille, utilisé, disponible, usage %)
 - interfaces réseau (adresses, état, débit, octets RX/TX)
 - services systemd (Linux) et Windows, conteneurs Docker, VM/CT Proxmox
+- inventaire de topologie pour Synapse : type de virtualisation, identité machine
+  hachée, UUID produit, sockets réseau et processus associés
+- labels, réseaux et adresses des conteneurs Docker ; UUID et hostname des
+  invités Proxmox lorsqu'ils sont exposés par l'hyperviseur
 - détection des capacités (Docker, systemd, Proxmox, Windows Services, launchd)
 - association push avec demandes approuvées/refusées par le master
 - actions typées à distance (services, conteneurs, VM/CT) sur liste d'autorisation

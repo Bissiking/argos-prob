@@ -16,3 +16,9 @@ func collectDocker(_ actions.Policy) []DockerContainer {
 func collectProxmox(_ actions.Policy) []ProxmoxGuest {
 	return nil
 }
+
+func collectVirtualizationIdentity() *VirtualizationIdentity {
+	return &VirtualizationIdentity{Kind: "unknown"}
+}
+
+func collectSockets() []NetworkSocket { return nil }
