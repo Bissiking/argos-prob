@@ -28,7 +28,7 @@ const (
 
 var actionsByCategory = map[string]map[string]bool{
 	CategoryService:   {"start": true, "stop": true, "restart": true},
-	CategoryContainer: {"start": true, "stop": true, "restart": true},
+	CategoryContainer: {"start": true, "stop": true, "restart": true, "reboot": true, "kill": true},
 	CategoryProxmox:   {"start": true, "stop": true, "reboot": true, "shutdown": true},
 }
 
@@ -57,7 +57,7 @@ type Command struct {
 func (p Policy) Allows(cmd Command) bool {
 	switch cmd.Category {
 	case CategoryService:
-		return matchAny(cmd.Target, p.Services)
+		return matchService(cmd.Target, p.Services)
 	case CategoryContainer:
 		return matchAny(cmd.Target, p.Containers)
 	case CategoryProxmox:
@@ -135,7 +135,7 @@ func (c Command) argv() (string, []string, error) {
 		if err != nil {
 			return "", nil, errors.New("docker introuvable : contrôles de conteneurs indisponibles sur cet hôte")
 		}
-		return bin, []string{c.Action, c.Target}, nil
+		return bin, []string{dockerAction(c.Action), c.Target}, nil
 	case CategoryProxmox:
 		name := "qm"
 		if c.Kind == KindLXC {
@@ -162,6 +162,25 @@ func matchAny(target string, patterns []string) bool {
 		}
 	}
 	return false
+}
+
+// matchService accepts the common shorthand "nginx" for the systemd unit
+// "nginx.service" while retaining exact/glob allowlist semantics.
+func matchService(target string, patterns []string) bool {
+	if matchAny(target, patterns) {
+		return true
+	}
+	if strings.HasSuffix(target, ".service") {
+		return matchAny(strings.TrimSuffix(target, ".service"), patterns)
+	}
+	return false
+}
+
+func dockerAction(action string) string {
+	if action == "reboot" {
+		return "restart"
+	}
+	return action
 }
 
 func validUnit(name string) bool {
