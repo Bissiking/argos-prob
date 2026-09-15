@@ -4,7 +4,7 @@ import "testing"
 
 func TestPolicyAllows(t *testing.T) {
 	policy := Policy{
-		Services:   []string{"nginx.service", "postgresql@*.service", "backup-*.service"},
+		Services:   []string{"nginx.service", "redis", "postgresql@*.service", "backup-*.service"},
 		Containers: []string{"nextcloud*", "prometheus"},
 		VMs:        []int{100, 104},
 	}
@@ -14,6 +14,7 @@ func TestPolicyAllows(t *testing.T) {
 		want bool
 	}{
 		{"service exact", Command{Category: CategoryService, Target: "nginx.service"}, true},
+		{"service sans suffixe", Command{Category: CategoryService, Target: "redis.service"}, true},
 		{"service glob instantiated", Command{Category: CategoryService, Target: "postgresql@14-main.service"}, true},
 		{"service glob étoile", Command{Category: CategoryService, Target: "backup-nightly.service"}, true},
 		{"service non listé", Command{Category: CategoryService, Target: "sshd.service"}, false},
@@ -39,6 +40,8 @@ func TestCommandValidate(t *testing.T) {
 		{Category: CategoryService, Target: "nginx.service", Action: "restart"},
 		{Category: CategoryService, Target: "postgresql@14-main.service", Action: "stop"},
 		{Category: CategoryContainer, Target: "nextcloud-db", Action: "start"},
+		{Category: CategoryContainer, Target: "nextcloud-db", Action: "reboot"},
+		{Category: CategoryContainer, Target: "nextcloud-db", Action: "kill"},
 		{Category: CategoryProxmox, Kind: KindQEMU, VMID: 100, Action: "shutdown"},
 		{Category: CategoryProxmox, Kind: KindLXC, VMID: 104, Action: "reboot"},
 	}
@@ -51,6 +54,7 @@ func TestCommandValidate(t *testing.T) {
 		{Category: CategoryService, Target: "nginx; rm -rf /", Action: "restart"},
 		{Category: CategoryService, Target: "nginx.service", Action: "purge"},
 		{Category: CategoryContainer, Target: "../../etc", Action: "start"},
+		{Category: CategoryContainer, Target: "nextcloud", Action: "shutdown"},
 		{Category: CategoryProxmox, Kind: "hv", VMID: 100, Action: "start"},
 		{Category: CategoryProxmox, Kind: KindQEMU, VMID: -3, Action: "start"},
 		{Category: "inconnue", Target: "x", Action: "start"},
@@ -82,5 +86,14 @@ func TestValidNameAndUnit(t *testing.T) {
 		if validUnit(unit) {
 			t.Errorf("validUnit(%q) aurait dû échouer", unit)
 		}
+	}
+}
+
+func TestDockerActions(t *testing.T) {
+	if got := dockerAction("reboot"); got != "restart" {
+		t.Fatalf("dockerAction(reboot) = %q, want restart", got)
+	}
+	if got := dockerAction("kill"); got != "kill" {
+		t.Fatalf("dockerAction(kill) = %q, want kill", got)
 	}
 }

@@ -99,7 +99,7 @@ configuration :
 
 - `services` — motifs glob d'unités systemd ou de noms de services Windows
   (`start`, `stop`, `restart`) ;
-- `containers` — motifs glob de noms Docker (`start`, `stop`, `restart`) ;
+- `containers` — motifs glob de noms Docker (`start`, `stop`, `restart`/`reboot`, `kill`) ;
 - `vms` — identifiants VM/CT Proxmox (`start`, `stop`, `reboot`, `shutdown`).
 
 Une liste vide **refuse tout** : l'agent reste en lecture seule (l'inventaire
@@ -122,7 +122,7 @@ cœurs), mémoire + swap, volumes de stockage, interfaces réseau, services
 
 ## Portée actuelle
 
-Version `1.4.0` fournit :
+Version `1.5.0` fournit :
 
 - identité d'agent persistante (agent_id, hostname)
 - **version d'agent** envoyée avec chaque snapshot et exposée sur `/health`
