@@ -1,21 +1,23 @@
-# Publication LUMA Store — Argos Prob 1.3.0
+# Publication LUMA Store — Argos Prob 1.5.1
 
-Ce document répertorie tous les artefacts produits dans `dist/` et indique les
-valeurs à sélectionner dans le formulaire LUMA Store.
+Ce document répertorie les artefacts attendus après reconstruction de la version
+1.5.1 dans `dist/` et les valeurs à sélectionner dans le formulaire LUMA Store.
+La mise à jour de ce document ne publie aucun paquet et ne remplace pas les
+anciens binaires : reconstruire et vérifier leur version avant publication.
 
 ## Artefacts publiables
 
 | Plateforme | Architecture | Format | Version système min. | Fichier | Usage conseillé |
 |---|---|---|---|---|---|
-| Windows | x64 | msi | Windows 10 / Windows Server 2016 | `dist/packages/argos-prob-1.3.0-windows-amd64.msi` | Installation standard — recommandé |
+| Windows | x64 | msi | Windows 10 / Windows Server 2016 | `dist/packages/argos-prob-1.5.1-windows-amd64.msi` | Installation standard — recommandé |
 | Windows | x64 | exe | Windows 10 / Windows Server 2016 | `dist/argos-prob-windows-amd64.exe` | Binaire portable ou future mise à jour |
-| Windows | x64 | zip | Windows 10 / Windows Server 2016 | `dist/argos-prob-1.3.0-windows-amd64.zip` | Distribution portable manuelle |
-| macOS | x64 | tar.gz | macOS 12 Monterey | `dist/argos-prob-1.3.0-darwin-amd64.tar.gz` | Distribution Intel — recommandé |
-| macOS | ARM64 | tar.gz | macOS 12 Monterey | `dist/argos-prob-1.3.0-darwin-arm64.tar.gz` | Distribution Apple Silicon — recommandé |
-| Linux | x64 | deb | Debian 11+ / Ubuntu 20.04+ | `dist/packages/argos-prob_1.3.0_amd64.deb` | Installation Debian/Ubuntu — recommandé |
-| Linux | ARM64 | deb | Debian 11+ / Ubuntu 20.04+ | `dist/packages/argos-prob_1.3.0_arm64.deb` | Installation Debian/Ubuntu ARM — recommandé |
-| Linux | x64 | tar.gz | Noyau Linux 3.2+ | `dist/argos-prob-1.3.0-linux-amd64.tar.gz` | Distribution Linux générique |
-| Linux | ARM64 | tar.gz | Noyau Linux 3.2+ | `dist/argos-prob-1.3.0-linux-arm64.tar.gz` | Distribution Linux générique ARM |
+| Windows | x64 | zip | Windows 10 / Windows Server 2016 | `dist/argos-prob-1.5.1-windows-amd64.zip` | Distribution portable manuelle |
+| macOS | x64 | tar.gz | macOS 12 Monterey | `dist/argos-prob-1.5.1-darwin-amd64.tar.gz` | Distribution Intel — recommandé |
+| macOS | ARM64 | tar.gz | macOS 12 Monterey | `dist/argos-prob-1.5.1-darwin-arm64.tar.gz` | Distribution Apple Silicon — recommandé |
+| Linux | x64 | deb | Debian 11+ / Ubuntu 20.04+ | `dist/packages/argos-prob_1.5.1_amd64.deb` | Installation Debian/Ubuntu — recommandé |
+| Linux | ARM64 | deb | Debian 11+ / Ubuntu 20.04+ | `dist/packages/argos-prob_1.5.1_arm64.deb` | Installation Debian/Ubuntu ARM — recommandé |
+| Linux | x64 | tar.gz | Noyau Linux 3.2+ | `dist/argos-prob-1.5.1-linux-amd64.tar.gz` | Distribution Linux générique |
+| Linux | ARM64 | tar.gz | Noyau Linux 3.2+ | `dist/argos-prob-1.5.1-linux-arm64.tar.gz` | Distribution Linux générique ARM |
 
 ## Sélection recommandée pour une publication simple
 
@@ -23,11 +25,11 @@ Pour ne proposer qu'un téléchargement principal par système et architecture :
 
 | Plateforme | Architecture | Artefact principal |
 |---|---|---|
-| Windows | x64 | `dist/packages/argos-prob-1.3.0-windows-amd64.msi` |
-| macOS | x64 | `dist/argos-prob-1.3.0-darwin-amd64.tar.gz` |
-| macOS | ARM64 | `dist/argos-prob-1.3.0-darwin-arm64.tar.gz` |
-| Linux | x64 | `dist/packages/argos-prob_1.3.0_amd64.deb` |
-| Linux | ARM64 | `dist/packages/argos-prob_1.3.0_arm64.deb` |
+| Windows | x64 | `dist/packages/argos-prob-1.5.1-windows-amd64.msi` |
+| macOS | x64 | `dist/argos-prob-1.5.1-darwin-amd64.tar.gz` |
+| macOS | ARM64 | `dist/argos-prob-1.5.1-darwin-arm64.tar.gz` |
+| Linux | x64 | `dist/packages/argos-prob_1.5.1_amd64.deb` |
+| Linux | ARM64 | `dist/packages/argos-prob_1.5.1_arm64.deb` |
 
 Le Store ne départage pas encore plusieurs formats ayant la même plateforme,
 la même architecture, la même version et le même canal. Pour les mises à jour
@@ -35,7 +37,7 @@ automatiques, ne publier qu'un artefact principal par combinaison. Les formats
 portables peuvent être conservés pour un téléchargement manuel lorsque l'API
 saura filtrer sur le type de paquet.
 
-## Fichiers techniques présents dans `dist/`
+## Fichiers techniques produits dans `dist/`
 
 Ces fichiers participent à la construction des archives et des installateurs.
 Ils ne doivent pas être envoyés directement au Store, à l'exception de l'EXE
@@ -51,8 +53,8 @@ Windows si une distribution portable est volontairement proposée.
 | `dist/msi-staging/bin/argos-prob.exe` | Copie de travail intégrée au MSI |
 | `dist/msi-staging/bin/config.json` | Configuration d'exemple intégrée au MSI |
 | `dist/msi-staging/installer.wxs` | Source WiX générée pour construire le MSI |
-| `dist/argos-prob_1.3.0_amd64/` | Arborescence temporaire du paquet DEB x64 |
-| `dist/argos-prob_1.3.0_arm64/` | Arborescence temporaire du paquet DEB ARM64 |
+| `dist/argos-prob_1.5.1_amd64/` | Arborescence temporaire du paquet DEB x64 |
+| `dist/argos-prob_1.5.1_arm64/` | Arborescence temporaire du paquet DEB ARM64 |
 
 ## Cibles non disponibles
 

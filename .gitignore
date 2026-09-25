@@ -1,6 +1,6 @@
 # .gitignore
-argos-prob
-argos-prob.exe
+/argos-prob
+/argos-prob.exe
 *.log
 /dist/
 /tmp/

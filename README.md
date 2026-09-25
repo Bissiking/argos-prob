@@ -1,5 +1,7 @@
 # Argos Prob
 
+**Version actuelle : 1.5.1** — [Notes de version](CHANGELOG.md).
+
 **Argos Prob** est l'agent hôte léger et multiplateforme d'Argos. Il se connecte
 au **master Argos** pour y être supervisé : le master accepte ou refuse son
 association, puis l'agent pousse son snapshot à l'intervalle consigné.
@@ -122,12 +124,12 @@ cœurs), mémoire + swap, volumes de stockage, interfaces réseau, services
 
 ## Portée actuelle
 
-Version `1.5.0` fournit :
+Version `1.5.1` fournit :
 
 - identité d'agent persistante (agent_id, hostname)
 - **version d'agent** envoyée avec chaque snapshot et exposée sur `/health`
   (`X-Argos-Agent-Version`) : le master affiche un avertissement **Mise à jour**
-  quand un agent est plus ancien que la version attendue
+  quand un agent est plus ancien que la version stable disponible dans le Store pour sa plateforme
 - OS / noyau / architecture / IP
 - CPU : usage %, load 1/5/15, nombre de cœurs
 - mémoire et swap
@@ -146,3 +148,9 @@ Version `1.5.0` fournit :
 
 Prochaines étapes : installation en service natif, plus de détails
 d'inventaire, isolation par fournisseur, logs structurés.
+
+### Version intégrée aux releases
+
+La version par défaut est définie dans `internal/version/version.go` et lue par le Makefile avec `awk` (Linux/macOS). `make build VERSION=x.y.z` injecte cette version dans la variable Go `version.Version` ; la commande `version`, les snapshots et l’en-tête de santé utilisent cette même valeur. Une constante Go ne peut pas être remplacée par `-ldflags -X`.
+
+Après remplacement d’un binaire installé, redémarrer le service agent pour que le processus actif annonce la nouvelle version au prochain envoi. `go test ./...` vérifie notamment qu’un binaire compilé avec une version de release annonce bien cette version.
