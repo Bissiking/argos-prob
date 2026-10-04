@@ -1,6 +1,6 @@
 # Argos Prob
 
-**Version actuelle : 1.5.1** — [Notes de version](CHANGELOG.md).
+**Version actuelle : 1.5.2** — [Notes de version](CHANGELOG.md).
 
 **Argos Prob** est l'agent hôte léger et multiplateforme d'Argos. Il se connecte
 au **master Argos** pour y être supervisé : le master accepte ou refuse son
@@ -108,6 +108,8 @@ Une liste vide **refuse tout** : l'agent reste en lecture seule (l'inventaire
 marque chaque service/conteneur/machine `controllable: false`) jusqu'à ce que
 son opérateur autorise explicitement des cibles.
 
+En mode **passive** (push), l’agent relit les autorisations et la cadence du master avant chaque inventaire et récupération de commandes. Les ajouts comme les suppressions sont appliqués en mémoire et enregistrés localement, y compris une liste entièrement vide. Si cette synchronisation échoue, les commandes restent suspendues jusqu’à une lecture valide. Les paquets historiques 1.5.1 ne relisent les autorisations qu’au démarrage : après un changement dans Argos, redémarrer le service `argos-prob` pour les appliquer. En mode **active** (pull), les autorisations se configurent localement et nécessitent un redémarrage.
+
 ## Snapshot transmis
 
 Le snapshot correspond au contrat `AgentSnapshot` du master : CPU (usage, load,
@@ -124,7 +126,7 @@ cœurs), mémoire + swap, volumes de stockage, interfaces réseau, services
 
 ## Portée actuelle
 
-Version `1.5.1` fournit :
+Version `1.5.2` fournit :
 
 - identité d'agent persistante (agent_id, hostname)
 - **version d'agent** envoyée avec chaque snapshot et exposée sur `/health`
@@ -154,3 +156,23 @@ d'inventaire, isolation par fournisseur, logs structurés.
 La version par défaut est définie dans `internal/version/version.go` et lue par le Makefile avec `awk` (Linux/macOS). `make build VERSION=x.y.z` injecte cette version dans la variable Go `version.Version` ; la commande `version`, les snapshots et l’en-tête de santé utilisent cette même valeur. Une constante Go ne peut pas être remplacée par `-ldflags -X`.
 
 Après remplacement d’un binaire installé, redémarrer le service agent pour que le processus actif annonce la nouvelle version au prochain envoi. `go test ./...` vérifie notamment qu’un binaire compilé avec une version de release annonce bien cette version.
+
+## Construire et installer la correction 1.5.2 sous Linux
+
+Avec Python 3 et Go, y compris depuis Windows :
+
+```sh
+python packaging/build-linux.py
+```
+
+Le script produit les paquets DEB et archives TAR.GZ x64 et ARM64 dans `dist/`, avec un manifeste et leurs SHA-256. `--arch amd64` ou `--arch arm64` limite la construction ; `--go CHEMIN` permet de choisir le compilateur. Le paquet Debian conserve la configuration et l’association déjà présentes, autorise la persistance des réglages synchronisés et redémarre le service lors d’une mise à jour. Il ne fournit aucun jeton ou identifiant d’agent partagé.
+
+Après avoir transféré le paquet correspondant à l’architecture du serveur :
+
+```sh
+sudo apt install ./argos-prob_1.5.2_amd64.deb
+argos-prob version
+sudo systemctl is-active argos-prob
+```
+
+Pour ARM64, utiliser `argos-prob_1.5.2_arm64.deb`. Après une première installation sans configuration, lancer `sudo argos-prob init` puis `sudo systemctl enable --now argos-prob`. La publication au Store reste une étape distincte : envoyer les DEB pour rendre la version accessible à la fonction de mise à jour d’Argos.

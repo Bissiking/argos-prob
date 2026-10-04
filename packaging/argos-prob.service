@@ -1,0 +1,18 @@
+[Unit]
+Description=Argos Prob - Host monitoring agent
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+ExecStart=/usr/bin/argos-prob run
+Restart=on-failure
+RestartSec=10
+ProtectSystem=strict
+ProtectHome=true
+NoNewPrivileges=true
+ReadWritePaths=/etc/argos-prob /var/lib/argos-prob
+StateDirectory=argos-prob
+
+[Install]
+WantedBy=multi-user.target
