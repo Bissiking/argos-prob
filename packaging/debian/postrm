@@ -1,0 +1,10 @@
+#!/bin/sh
+set -e
+
+if [ "$1" = purge ]; then
+    rm -f /etc/argos-prob/config.json /var/lib/argos-prob/config.pre-upgrade.json
+    rmdir /etc/argos-prob /var/lib/argos-prob 2>/dev/null || true
+fi
+if command -v systemctl >/dev/null 2>&1 && [ -d /run/systemd/system ]; then
+    systemctl daemon-reload
+fi

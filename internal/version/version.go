@@ -6,4 +6,4 @@ package version
 // active-mode /health endpoint. The master compares it with the stable
 // Store release available for the agent platform and architecture.
 // Version is a variable so release builds can override it with go build -ldflags -X.
-var Version = "1.5.1"
+var Version = "1.5.2"

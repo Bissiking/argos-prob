@@ -7,3 +7,6 @@
 packaging/rpm-build/
 packaging/*/
 .DS_Store
+
+!packaging/debian/
+!packaging/debian/*

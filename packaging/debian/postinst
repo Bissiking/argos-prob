@@ -1,0 +1,19 @@
+#!/bin/sh
+set -e
+
+if [ "$1" = configure ]; then
+    install -d -m 700 /etc/argos-prob /var/lib/argos-prob
+    if [ -f /var/lib/argos-prob/config.pre-upgrade.json ]; then
+        cp -p /var/lib/argos-prob/config.pre-upgrade.json /etc/argos-prob/config.json
+        chmod 600 /etc/argos-prob/config.json
+        rm -f /var/lib/argos-prob/config.pre-upgrade.json
+    fi
+    if command -v systemctl >/dev/null 2>&1 && [ -d /run/systemd/system ]; then
+        systemctl daemon-reload
+        systemctl enable argos-prob.service
+        # A fresh installation must be associated using `argos-prob init` first.
+        if [ -f /etc/argos-prob/config.json ]; then
+            systemctl restart argos-prob.service
+        fi
+    fi
+fi

@@ -12,6 +12,7 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+	"reflect"
 	"strconv"
 	"strings"
 	"time"
@@ -71,6 +72,10 @@ func Associate(ctx context.Context, cfg config.Config, hostname string) (string,
 // approved by the master (waiting for the human to accept it), then it POSTs
 // the host snapshot every configured interval.
 func PushLoop(ctx context.Context, cfg config.Config) error {
+	return pushLoop(ctx, cfg, collect)
+}
+
+func pushLoop(ctx context.Context, cfg config.Config, collectSnapshot func(config.Config) (host.Snapshot, error)) error {
 	base := baseURL(cfg.Endpoint)
 	if base == "" {
 		return errors.New(`passive mode requires an "endpoint" in the configuration`)
@@ -82,7 +87,6 @@ func PushLoop(ctx context.Context, cfg config.Config) error {
 	}
 
 	interval := retryDelay
-	var actions json.RawMessage
 watch:
 	for {
 		select {
@@ -90,7 +94,7 @@ watch:
 			return nil
 		default:
 		}
-		status, intervalMs, masterActions, err := syncWithMaster(ctx, client, base, cfg.Token, hostname)
+		status, intervalMs, _, err := syncWithMaster(ctx, client, base, cfg.Token, hostname)
 		if err != nil {
 			log.Printf("master injoignable (%v) — nouvelle tentative dans %s", err, retryDelay)
 		} else {
@@ -98,9 +102,6 @@ watch:
 			case "approved":
 				if intervalMs > 0 {
 					interval = time.Duration(intervalMs) * time.Millisecond
-				}
-				if masterActions != nil {
-					actions = masterActions
 				}
 				log.Printf("association approuvée : poussée toutes les %s vers %s/api/v1/agents/metrics", interval, base)
 				break watch
@@ -117,20 +118,24 @@ watch:
 		}
 	}
 
-	if actions != nil {
-		var a config.Actions
-		if json.Unmarshal(actions, &a) == nil && (len(a.Services) > 0 || len(a.Containers) > 0 || len(a.VMs) > 0) {
-			cfg.Actions = a
-			if err := config.SaveConfig(cfg); err != nil {
-				log.Printf("sauvegarde des actions depuis le master échouée: %v", err)
-			} else {
-				log.Printf("actions synchronisées depuis le master: %d services, %d conteneurs, %d VMs", len(a.Services), len(a.Containers), len(a.VMs))
-			}
-		}
-	}
-
 	for {
-		snapshot, err := collect(cfg)
+		// Apply grants and revocations before both inventory and commands.
+		nextInterval, policyErr := refreshRuntime(ctx, client, &cfg)
+		if policyErr != nil {
+			if errors.Is(policyErr, ErrNotApproved) {
+				log.Printf("association révoquée — retour en attente")
+				select {
+				case <-ctx.Done():
+					return nil
+				case <-time.After(retryDelay):
+				}
+				goto watch
+			}
+			log.Printf("configuration maîtresse injoignable, commandes suspendues: %v", policyErr)
+		} else if nextInterval > 0 {
+			interval = nextInterval
+		}
+		snapshot, err := collectSnapshot(cfg)
 		if err != nil {
 			log.Printf("collect failed: %v", err)
 		} else if err := pushMetrics(ctx, client, base, cfg.Token, snapshot); err != nil {
@@ -142,13 +147,15 @@ watch:
 			log.Printf("push failed: %v", err)
 		}
 
-		if err := refreshCommands(ctx, client, cfg); err != nil {
-			if errors.Is(err, ErrNotApproved) {
-				log.Printf("association révoquée — retour en attente")
-				time.Sleep(retryDelay)
-				goto watch
+		if policyErr == nil {
+			if err := refreshCommands(ctx, client, cfg); err != nil {
+				if errors.Is(err, ErrNotApproved) {
+					log.Printf("association révoquée — retour en attente")
+					time.Sleep(retryDelay)
+					goto watch
+				}
+				log.Printf("commandes maîtresses injoignables: %v", err)
 			}
-			log.Printf("commandes maîtresses injoignables: %v", err)
 		}
 
 		select {
@@ -157,6 +164,33 @@ watch:
 		case <-time.After(interval):
 		}
 	}
+}
+
+// refreshRuntime reads the current master policy on every push cycle. Empty
+// actions revoke all permissions; a failed refresh prevents command execution.
+func refreshRuntime(ctx context.Context, client *http.Client, cfg *config.Config) (time.Duration, error) {
+	conf, err := fetchConfig(ctx, client, baseURL(cfg.Endpoint), cfg.Token)
+	if err != nil {
+		return 0, err
+	}
+	if conf.Status != "approved" {
+		return 0, ErrNotApproved
+	}
+	if len(conf.Actions) == 0 || bytes.Equal(bytes.TrimSpace(conf.Actions), []byte("null")) {
+		return 0, errors.New("configuration maîtresse sans politique d'actions")
+	}
+	var next config.Actions
+	if err := json.Unmarshal(conf.Actions, &next); err != nil {
+		return 0, fmt.Errorf("politique d'actions invalide: %w", err)
+	}
+	if !reflect.DeepEqual(cfg.Actions, next) {
+		cfg.Actions = next
+		if err := config.SaveConfig(*cfg); err != nil {
+			log.Printf("sauvegarde des actions depuis le master échouée: %v", err)
+		}
+		log.Printf("actions synchronisées depuis le master: %d services, %d conteneurs, %d VMs", len(next.Services), len(next.Containers), len(next.VMs))
+	}
+	return time.Duration(conf.IntervalMs) * time.Millisecond, nil
 }
 
 // runCommand executes a typed command locally, provided the operator

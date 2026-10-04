@@ -1,0 +1,14 @@
+#!/bin/sh
+set -e
+
+# Older packages shipped config.json as a regular file. Preserve the current
+# association before dpkg removes that obsolete packaged file during upgrade.
+case "$1" in
+    install|upgrade)
+        if [ -f /etc/argos-prob/config.json ]; then
+            install -d -m 700 /var/lib/argos-prob
+            cp -p /etc/argos-prob/config.json /var/lib/argos-prob/config.pre-upgrade.json
+            chmod 600 /var/lib/argos-prob/config.pre-upgrade.json
+        fi
+        ;;
+esac
